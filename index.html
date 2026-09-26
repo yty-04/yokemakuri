@@ -372,7 +372,7 @@ function initAudio() {
 }
 
 function tone(freq, dur, type = 'sine', vol = 0.3, when = 0) {
-  if (!audioCtx || !soundOn) return;
+  if (!audioCtx || !soundOn || document.hidden) return;
   const t = audioCtx.currentTime + when;
   const osc = audioCtx.createOscillator();
   const g = audioCtx.createGain();
@@ -462,7 +462,7 @@ let currentTrack = null;
 
 // short noise-ish percussion using a fast pitch drop
 function drumHit(kind) {
-  if (!audioCtx || !soundOn) return;
+  if (!audioCtx || !soundOn || document.hidden) return;
   const t = audioCtx.currentTime;
   const osc = audioCtx.createOscillator();
   const g = audioCtx.createGain();
@@ -485,7 +485,9 @@ function drumHit(kind) {
 }
 
 function startBgm(trackName = 'game') {
-  if (!audioCtx || !soundOn) return;
+  // never start music while the page is in the background. A resume() that
+  // finishes after the player switched to another site would otherwise start it there.
+  if (!audioCtx || !soundOn || document.hidden) return;
   if (bgmTimer && currentTrack === trackName) return; // already playing this track
   stopBgm();
   currentTrack = trackName;
@@ -493,6 +495,7 @@ function startBgm(trackName = 'game') {
   bgmStep = 0;
   bgmTimer = setInterval(() => {
     if (!soundOn || !audioCtx) return;
+    if (document.hidden) { silenceForBackground(); return; } // safety net
     const i = bgmStep % t.melody.length;
     const mel = t.melody[i] ? NOTE[t.melody[i]] : null;
     if (mel) tone(mel, t.interval / 1000 * 0.85, t.melType, t.melVol);
@@ -532,6 +535,7 @@ function primeHomeAudio() {
   initAudio();
   if (!audioCtx) return;
   const go = () => {
+    if (document.hidden) { silenceForBackground(); return; } // left before audio unlocked
     if (audioCtx.state !== 'running') return; // still blocked; stay armed
     window.removeEventListener('pointerdown', primeHomeAudio);
     window.removeEventListener('touchstart', primeHomeAudio);
@@ -550,28 +554,41 @@ window.addEventListener('click', primeHomeAudio);
 // Stop the music when the tab/app goes to the background, and pick it back up
 // on return. Without this the BGM keeps looping behind other apps.
 let bgmTrackBeforeHide = null;
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    bgmTrackBeforeHide = currentTrack;
-    stopBgm();
-    if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
-    // pause the run so you don't return to an already-lost game.
-    // pauseGame() shows the overlay, so returning players resume deliberately.
-    if (running && !dying) pauseGame();
+// Stop the music and put the audio engine to sleep. Suspends in any state
+// (not only 'running'): iOS can report 'interrupted' and later wake it by itself.
+function silenceForBackground() {
+  if (currentTrack) bgmTrackBeforeHide = currentTrack;
+  stopBgm();
+  if (audioCtx && audioCtx.state !== 'closed') audioCtx.suspend().catch(() => {});
+}
+function onPageHidden() {
+  silenceForBackground();
+  // pause the run so you don't return to an already-lost game.
+  // pauseGame() shows the overlay, so returning players resume deliberately.
+  if (running && !dying) pauseGame();
+}
+// pagehide also covers leaving for another site in the same tab
+window.addEventListener('pagehide', onPageHidden);
+function onPageShown() {
+  if (!soundOn || !audioCtx) return;
+  const resume = () => {
+    if (document.hidden) { silenceForBackground(); return; } // left again while resuming
+    // paused runs stay silent until the player hits 再開
+    if (!paused) startBgm(running ? 'game' : (bgmTrackBeforeHide || 'home'));
+    bgmTrackBeforeHide = null;
+  };
+  if (audioCtx.state !== 'running') {
+    audioCtx.resume().then(resume).catch(() => {});
   } else {
-    if (!soundOn) return;
-    const resume = () => {
-      // paused runs stay silent until the player hits 再開
-      if (!paused) startBgm(running ? 'game' : (bgmTrackBeforeHide || 'home'));
-      bgmTrackBeforeHide = null;
-    };
-    if (audioCtx && audioCtx.state === 'suspended') {
-      audioCtx.resume().then(resume).catch(() => {});
-    } else {
-      resume();
-    }
+    resume();
   }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) onPageHidden();
+  else onPageShown();
 });
+// coming back with the browser's back button restores the page without a reload
+window.addEventListener('pageshow', e => { if (e.persisted && !document.hidden) onPageShown(); });
 // ---------- /AUDIO ----------
 
 let W, H, dpr;
