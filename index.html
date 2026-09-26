@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>よけまくり</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%; overflow: hidden; background: #0a0e1a;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    user-select: none; -webkit-user-select: none; touch-action: none;
+  }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; background: linear-gradient(180deg, #0d1224 0%, #131a33 100%); touch-action: none; }
+  #hud {
+    position: fixed; top: env(safe-area-inset-top, 12px); left: 0; right: 0;
+    padding: 14px 20px; display: flex; justify-content: space-between; align-items: baseline;
+    pointer-events: none; z-index: 5;
+  }
+  #score {
+    font-size: 34px; font-weight: 800; color: #e8ecff;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+    text-shadow: 0 2px 12px rgba(90,140,255,0.4);
+  }
+  #best { font-size: 13px; font-weight: 600; color: #6b78a8; letter-spacing: 0.08em; }
+  .score-wrap { display: flex; align-items: baseline; gap: 10px; }
+  #multTag {
+    font-size: 15px; font-weight: 800; color: #6b78a8; font-variant-numeric: tabular-nums;
+    transition: color 0.2s, transform 0.2s; transform-origin: left center;
+  }
+  #multTag.hot { color: #ffd45c; text-shadow: 0 0 12px rgba(255,212,92,0.6); }
+  .hud-right { display: flex; align-items: center; gap: 12px; pointer-events: auto; }
+  #soundToggle {
+    background: rgba(255,255,255,0.06); border: none; border-radius: 100px;
+    width: 38px; height: 38px; font-size: 17px; cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+  }
+  #soundToggle:active { transform: scale(0.9); }
+  #pauseBtn {
+    background: rgba(255,255,255,0.06); border: none; border-radius: 100px;
+    width: 38px; height: 38px; font-size: 12px; cursor: pointer; line-height: 1;
+    color: #c3cdeb; display: flex; align-items: center; justify-content: center;
+    padding: 0; font-family: inherit;
+  }
+  #pauseBtn:active { transform: scale(0.9); }
+  #pauseScreen .title { font-size: 34px; margin-bottom: 26px; }
+  .pause-keys {
+    font-size: 12px; color: #5a6690; margin-top: 22px; line-height: 1.8;
+  }
+  #statusBar {
+    position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top, 12px) + 60px);
+    display: flex; gap: 8px; justify-content: center; z-index: 5; pointer-events: none;
+    flex-wrap: wrap; padding: 0 12px;
+  }
+  .status-pill {
+    font-size: 13px; font-weight: 700; color: #0a0e1a;
+    padding: 7px 16px; border-radius: 100px; letter-spacing: 0.03em;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+  #bombBtn {
+    position: fixed; z-index: 6;
+    left: 50%; transform: translateX(-50%);
+    bottom: calc(env(safe-area-inset-bottom, 24px) + 20px);
+    border: none; padding: 6px 14px; border-radius: 100px;
+    display: flex; flex-direction: row; align-items: center; gap: 8px;
+    background: rgba(26,34,64,0.85); pointer-events: none;
+  }
+  .bomb-icon { font-size: 18px; line-height: 1; filter: grayscale(0.3); }
+  .bomb-gauge {
+    width: 90px; height: 7px; border-radius: 4px; background: rgba(255,255,255,0.15); overflow: hidden;
+  }
+  .bomb-fill { display: block; height: 100%; width: 0%; background: #ffb450; border-radius: 4px; transition: width 0.12s linear; }
+  #bombBtn.hidden { display: none; }
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center; padding: 32px; z-index: 10;
+    background: rgba(10,14,26,0.82); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  }
+  .overlay.hidden { display: none; }
+  .title {
+    font-size: 42px; font-weight: 800; color: #eaf0ff; letter-spacing: 0.02em;
+    margin-bottom: 18px; text-shadow: 0 4px 24px rgba(90,140,255,0.5);
+  }
+  .tagline { font-size: 15px; color: #8b96c4; margin-bottom: 28px; line-height: 1.6; }
+  .chip { width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0; }
+
+  .home-inner {
+    display: flex; flex-direction: column; align-items: center;
+    width: 100%; max-width: 420px; max-height: 100%;
+  }
+  .tabs {
+    display: flex; gap: 6px; margin-bottom: 18px; flex-shrink: 0;
+    background: rgba(255,255,255,0.05); padding: 4px; border-radius: 100px;
+  }
+  .tab {
+    background: transparent; border: none; color: #8b96c4; font-family: inherit;
+    font-size: 14px; font-weight: 700; padding: 9px 20px; border-radius: 100px;
+    cursor: pointer; transition: background 0.15s, color 0.15s;
+  }
+  .tab.active { background: #5c8cff; color: #fff; }
+  .tab-panel { display: none; width: 100%; flex-direction: column; align-items: center; min-height: 0; }
+  .tab-panel.active { display: flex; }
+  .info-list {
+    display: flex; flex-direction: column; gap: 10px;
+    width: 100%; overflow-y: auto; padding: 4px 2px;
+    max-height: 52vh;
+    text-align: left; -webkit-overflow-scrolling: touch;
+  }
+  .info-row {
+    background: rgba(255,255,255,0.04); border-radius: 12px; padding: 12px 15px;
+    font-size: 13px; color: #a9b6e0; line-height: 1.55;
+  }
+  .info-row b { display: block; color: #eaf0ff; font-size: 14px; margin-bottom: 3px; }
+  .item-row b { display: flex; align-items: center; gap: 8px; }
+  .rare-row { background: rgba(255,184,0,0.07); border: 1px solid rgba(255,184,0,0.2); }
+  .btn-row { display: flex; gap: 10px; align-items: center; }
+  .share-btn {
+    margin-top: 14px; background: transparent; border: none;
+    color: #7c88b4; font-family: inherit; font-size: 13px; font-weight: 700;
+    padding: 8px 16px; border-radius: 100px; cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: color 0.15s, background 0.15s;
+  }
+  .share-btn:hover { color: #eaf0ff; background: rgba(255,255,255,0.06); }
+  .share-btn:active { transform: scale(0.96); }
+  .big-score {
+    font-size: 68px; font-weight: 800; color: #5c8cff;
+    font-variant-numeric: tabular-nums; line-height: 1; margin-bottom: 8px;
+  }
+  .comment {
+    font-size: 18px; font-weight: 700; color: #eaf0ff;
+    margin-bottom: 16px; line-height: 1.4; min-height: 24px;
+  }
+  .advice {
+    font-size: 13px; color: #a9b6e0; line-height: 1.5;
+    background: rgba(92,140,255,0.1); border: 1px solid rgba(92,140,255,0.25);
+    border-radius: 12px; padding: 10px 16px; margin-bottom: 20px; max-width: 280px;
+  }
+  .advice:empty { display: none; }
+  .score-label { font-size: 13px; color: #6b78a8; letter-spacing: 0.12em; margin-bottom: 8px; }
+  .hidden { display: none !important; }
+  .new-best { font-size: 14px; font-weight: 700; color: #ffd45c; margin-bottom: 20px; letter-spacing: 0.05em; }
+  .ranking {
+    display: flex; flex-direction: column; gap: 2px; margin-bottom: 34px;
+    background: rgba(255,255,255,0.04); padding: 14px 20px; border-radius: 16px; min-width: 180px;
+  }
+  .rank-title { font-size: 11px; color: #6b78a8; letter-spacing: 0.14em; margin-bottom: 8px; }
+  .rank-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 15px; padding: 5px 0; font-variant-numeric: tabular-nums;
+  }
+  .rank-row .pos { color: #6b78a8; font-weight: 700; font-size: 13px; width: 24px; text-align: left; }
+  .rank-row .val { color: #b8c2e8; font-weight: 700; }
+  .rank-row.current .val { color: #ffd45c; }
+  .rank-row.current .pos { color: #ffd45c; }
+  .rank-row.empty .val { color: #3a4468; }
+  .btn {
+    background: linear-gradient(180deg, #6f9bff 0%, #4d7dfa 100%);
+    color: #fff; border: none; padding: 0 34px; height: 54px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: 17px; font-weight: 700; border-radius: 100px; cursor: pointer;
+    letter-spacing: 0.02em; white-space: nowrap;
+    box-shadow: 0 6px 20px rgba(77,125,250,0.4), inset 0 1px 0 rgba(255,255,255,0.25);
+    transition: transform 0.12s ease, box-shadow 0.2s ease; font-family: inherit;
+  }
+  .btn:hover { box-shadow: 0 8px 26px rgba(77,125,250,0.55), inset 0 1px 0 rgba(255,255,255,0.25); }
+  /* secondary: must come after .btn to win the cascade */
+  .btn-sub {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.16);
+    color: #c3cdeb; padding: 0 26px;
+    box-shadow: none;
+  }
+  .btn-sub:hover {
+    background: rgba(255,255,255,0.12); color: #fff;
+    box-shadow: none;
+  }
+  /* big call-to-action on the home screen */
+  .btn-lg { height: 60px; padding: 0 56px; font-size: 19px; }
+  .btn-ico { font-size: 17px; line-height: 1; opacity: 0.9; }
+  .home-best {
+    font-size: 14px; font-weight: 700; color: #ffd45c;
+    margin-bottom: 22px; letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
+  }
+  .home-best:empty { display: none; }
+  .btn:active { transform: scale(0.94); }
+  .hint { margin-top: 28px; font-size: 13px; color: #5a6690; letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game"></canvas></div>
+
+<div id="hud">
+  <div class="score-wrap">
+    <div id="score">0</div>
+    <div id="multTag">×1.0</div>
+  </div>
+  <div class="hud-right">
+    <div id="best">BEST 0</div>
+    <button id="pauseBtn" class="hidden" aria-label="一時停止">❚❚</button>
+    <button id="soundToggle" aria-label="サウンド切り替え">🔊</button>
+  </div>
+</div>
+<div id="statusBar"></div>
+<div id="bombBtn" class="hidden">
+  <span class="bomb-icon">💣</span>
+  <span class="bomb-gauge"><span class="bomb-fill" id="bombFill"></span></span>
+</div>
+
+<div class="overlay" id="startScreen">
+  <div class="home-inner">
+    <div class="title">よけまくり</div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="game">ゲーム</button>
+      <button class="tab" data-tab="tips">コツ</button>
+      <button class="tab" data-tab="items">アイテム</button>
+    </div>
+
+    <div class="tab-panel active" id="panel-game">
+      <div class="tagline">落ちてくるブロックをよけろ。<br>指で動かすだけ。上に行くほど高得点。</div>
+      <div class="home-best" id="homeBest"></div>
+      <button class="btn btn-lg" id="startBtn">スタート</button>
+      <div class="hint">画面をなぞって上下左右に移動</div>
+    </div>
+
+    <div class="tab-panel" id="panel-tips">
+      <div class="info-list">
+        <div class="info-row"><b>上ほど高得点</b>画面の上で動かすほどスコア倍率が上がり、最上部で最大2倍。上は避けにくいぶんハイリスク・ハイリターン。</div>
+        <div class="info-row"><b>アイテムを拾う</b>拾った数だけスコア倍率が永続で上がる（最大2倍）。序盤の回収が後半の伸びに直結する。</div>
+        <div class="info-row"><b>シールドは3枚まで</b>重ねて持てるので、安全なうちに拾っておくと上で攻める保険になる。3枚持った状態で拾うと+150点のボーナス。</div>
+        <div class="info-row"><b>ボムは自動</b>避け続けると自動で溜まり、満タンで全消し。最速でも約9秒に1回なので、頼りきりにはできない。</div>
+        <div class="info-row"><b>無敵中が稼ぎ時</b>★を取ったら上に張り付いて一気に稼ぐ。当たっても消えるので恐れず攻める。</div>
+        <div class="info-row"><b>レアは狙う価値あり</b>大きく光るアイテムは強力。多少無理してでも取りに行くとスコアが跳ねる。</div>
+        <div class="info-row"><b>難易度は時間で上がる</b>スコアではなく経過時間でブロックが速く・多くなる。長く粘るほど厳しくなる。</div>
+        <div class="info-row"><b>上部の光る帯が高得点ゾーン</b>点線より上は倍率が高い。危険だがスコアが伸びる。</div>
+        <div class="info-row"><b>PCならキーボードも使える</b>矢印キーまたはWASDで移動、スペースで一時停止。</div>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-items">
+      <div class="info-list">
+        <div class="info-row item-row"><b><span class="chip" style="background:#4dd4ff"></span>シールド</b>被弾を1回防ぐ。最大3枚まで重ねられる。3枚持った状態で拾うと+150点。</div>
+        <div class="info-row item-row"><b><span class="chip" style="background:#ffa94d"></span>ブロック減 ▽</b>しばらくブロックの出現数が減る（8秒）。</div>
+        <div class="info-row item-row"><b><span class="chip" style="background:#ffd22e"></span>無敵 ★</b>5秒間無敵。ブロックに当たっても消えるだけ。</div>
+        <div class="info-row item-row"><b><span class="chip" style="background:#ffb450"></span>ボム 💣（自動）</b>避け続けると自動で溜まり、満タンで自動発動して全消し。最速でも約9秒に1回。</div>
+        <div class="info-row item-row rare-row"><b><span class="chip" style="background:#ff6b35"></span>大揃場 💥（レア）</b>画面のブロックを全消しし、ボムゲージも即満タンに。</div>
+        <div class="info-row item-row rare-row"><b><span class="chip" style="background:#ff4d6d"></span>スコア×2（レア）</b>8秒間スコアが2倍。高さ倍率と重なると一気に伸びる。</div>
+        <div class="info-row item-row rare-row"><b><span class="chip" style="background:#ffb800"></span>特大無敵 🌟（レア）</b>通常の倍、10秒間の無敵。</div>
+        <div class="info-row item-row rare-row"><b><span class="chip" style="background:#5cff9d"></span>ブロック激減 🍃（レア）</b>12秒間ブロックが激減。通常の「ブロック減」より強力。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="pauseScreen">
+  <div class="title">一時停止</div>
+  <div class="btn-row">
+    <button class="btn btn-sub" id="quitBtn"><span class="btn-ico">⌂</span>やめる</button>
+    <button class="btn" id="resumeBtn"><span class="btn-ico">▶</span>再開</button>
+  </div>
+  <div class="pause-keys">キーボード: 矢印キー / WASD で移動<br>スペース で一時停止・再開</div>
+</div>
+
+<div class="overlay hidden" id="gameOverScreen">
+  <div class="score-label">SCORE</div>
+  <div class="big-score" id="finalScore">0</div>
+  <div class="comment" id="comment"></div>
+  <div class="advice" id="advice"></div>
+  <div class="new-best hidden" id="newBest">🎉 ベスト更新！</div>
+  <div class="ranking" id="ranking"></div>
+  <div class="btn-row">
+    <button class="btn btn-sub" id="homeBtn"><span class="btn-ico">⌂</span>ホーム</button>
+    <button class="btn" id="retryBtn"><span class="btn-ico">↻</span>もう一度</button>
+  </div>
+  <button class="share-btn" id="shareBtn">𝕏 でスコアを共有</button>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('score');
+const multTagEl = document.getElementById('multTag');
+const bestEl = document.getElementById('best');
+const statusBar = document.getElementById('statusBar');
+const startScreen = document.getElementById('startScreen');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const finalScoreEl = document.getElementById('finalScore');
+const newBestEl = document.getElementById('newBest');
+const rankingEl = document.getElementById('ranking');
+const commentEl = document.getElementById('comment');
+const adviceEl = document.getElementById('advice');
+const soundToggleEl = document.getElementById('soundToggle');
+const bombBtn = document.getElementById('bombBtn');
+const bombFill = document.getElementById('bombFill');
+
+// ---------- AUDIO ----------
+let audioCtx = null;
+let soundOn = true;
+let masterGain = null;
+let bgmTimer = null;
+let bgmStep = 0;
+
+function initAudio() {
+  if (audioCtx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new AC();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.62;
+  // compressor keeps things loud without clipping when notes stack up
+  const comp = audioCtx.createDynamicsCompressor();
+  comp.threshold.setValueAtTime(-12, audioCtx.currentTime);
+  comp.knee.setValueAtTime(20, audioCtx.currentTime);
+  comp.ratio.setValueAtTime(8, audioCtx.currentTime);
+  comp.attack.setValueAtTime(0.003, audioCtx.currentTime);
+  comp.release.setValueAtTime(0.2, audioCtx.currentTime);
+  masterGain.connect(comp);
+  comp.connect(audioCtx.destination);
+}
+
+function tone(freq, dur, type = 'sine', vol = 0.3, when = 0) {
+  if (!audioCtx || !soundOn) return;
+  const t = audioCtx.currentTime + when;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.connect(g); g.connect(masterGain);
+  osc.start(t); osc.stop(t + dur + 0.02);
+}
+
+const SFX = {
+  item()  { tone(880, 0.08, 'triangle', 0.35); tone(1320, 0.1, 'triangle', 0.3, 0.06); },
+  shield() { tone(400, 0.15, 'sawtooth', 0.25); tone(300, 0.2, 'square', 0.2, 0.05); },
+  over()  { tone(300, 0.2, 'sawtooth', 0.35); tone(200, 0.25, 'sawtooth', 0.3, 0.12); tone(120, 0.4, 'sawtooth', 0.3, 0.24); },
+  best()  { [523,659,784,1047].forEach((f,i)=>tone(f,0.18,'triangle',0.3,i*0.09)); },
+  // per-item pickup sounds
+  pickShield() { tone(392, 0.12, 'square', 0.3); tone(294, 0.18, 'triangle', 0.28, 0.05); },
+  pickThin()   { tone(880, 0.08, 'sine', 0.3); tone(660, 0.1, 'sine', 0.28, 0.05); tone(494, 0.12, 'sine', 0.26, 0.1); },
+  pickShrink() { tone(523, 0.1, 'triangle', 0.28); tone(698, 0.12, 'triangle', 0.28, 0.06); tone(880, 0.14, 'triangle', 0.26, 0.12); },
+  pickInvinc() { [523,659,784,1047,1319].forEach((f,i)=>tone(f,0.14,'square',0.3,i*0.06)); },
+  pickRare() { [523,659,784,1047,1319,1568].forEach((f,i)=>tone(f,0.16,'triangle',0.33,i*0.05)); tone(2093,0.3,'sine',0.25,0.32); },
+  bomb() {
+    tone(90, 0.5, 'sawtooth', 0.4);
+    tone(60, 0.6, 'square', 0.35, 0.02);
+    [1200,900,600,300].forEach((f,i)=>tone(f,0.12,'triangle',0.25,i*0.04));
+  }
+};
+
+const ITEM_SFX = {
+  shield: 'pickShield',
+  thin:   'pickThin',
+  invinc: 'pickInvinc',
+  clear:  'pickRare',
+  double: 'pickRare',
+  megainv:'pickRare',
+  megathin:'pickRare'
+};
+
+// looping bgm: bassline + melody, played as a short chiptune loop
+const NOTE = {
+  C2:65.41, D2:73.42, E2:82.41, F2:87.31, G2:98.00, A2:110.00, B2:123.47,
+  C3:130.81, D3:146.83, E3:164.81, F3:174.61, G3:196.00, A3:220.00, B3:246.94,
+  C4:261.63, D4:293.66, E4:329.63, F4:349.23, G4:392.00, A4:440.00, B4:493.88,
+  C5:523.25, D5:587.33, E5:659.25, F5:698.46, G5:783.99, A5:880.00, B5:987.77, C6:1046.50
+};
+
+// --- game theme: driving, urgent chiptune ---
+const BGM_MELODY = [
+  'E5','B4','C5','D5','C5','B4','A4','A4','C5','E5','D5','C5','B4',null,'C5','D5',
+  'E5','C5','A4','A4',null,'D5','F5','A5','G5','F5','E5',null,'C5','E5','D5','C5'
+];
+const BGM_BASS = [
+  'A2',null,'A2',null,'A2',null,'A2',null,'F2',null,'F2',null,'F2',null,'F2',null,
+  'G2',null,'G2',null,'G2',null,'G2',null,'E2',null,'E2',null,'E2',null,'E2',null
+];
+// percussive accents: 'k'=kick, 'h'=hat
+const BGM_DRUM = [
+  'k','h',null,'h','k','h',null,'h','k','h',null,'h','k','h','k','h',
+  'k','h',null,'h','k','h',null,'h','k','h',null,'h','k','h','k','h'
+];
+const BGM_INTERVAL = 150; // faster = more urgent
+
+// --- home theme: upbeat but relaxed chiptune ---
+const HOME_MELODY = [
+  'C5','E5','G5','E5','C5',null,'A4','B4','C5','D5','E5',null,'D5','C5','B4',null,
+  'A4','C5','E5','C5','A4',null,'G4','A4','B4','C5','D5',null,'C5','B4','C5',null
+];
+const HOME_BASS = [
+  'C3',null,'G2',null,'C3',null,'G2',null,'A2',null,'E2',null,'A2',null,'E2',null,
+  'F2',null,'C3',null,'F2',null,'C3',null,'G2',null,'D3',null,'G2',null,'G2',null
+];
+const HOME_DRUM = [
+  'k',null,'h',null,'k',null,'h',null,'k',null,'h',null,'k',null,'h',null,
+  'k',null,'h',null,'k',null,'h',null,'k',null,'h',null,'k',null,'h',null
+];
+const HOME_INTERVAL = 200;
+
+const TRACKS = {
+  game: { melody: BGM_MELODY, bass: BGM_BASS, drum: BGM_DRUM, interval: BGM_INTERVAL,
+          melVol: 0.30, bassVol: 0.34, melType: 'square' },
+  home: { melody: HOME_MELODY, bass: HOME_BASS, drum: HOME_DRUM, interval: HOME_INTERVAL,
+          melVol: 0.26, bassVol: 0.30, melType: 'square' }
+};
+let currentTrack = null;
+
+// short noise-ish percussion using a fast pitch drop
+function drumHit(kind) {
+  if (!audioCtx || !soundOn) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  if (kind === 'k') {
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, t);
+    osc.frequency.exponentialRampToValueAtTime(45, t + 0.11);
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(t); osc.stop(t + 0.16);
+  } else {
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(7000, t);
+    g.gain.setValueAtTime(0.06, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+    osc.connect(g); g.connect(masterGain);
+    osc.start(t); osc.stop(t + 0.05);
+  }
+}
+
+function startBgm(trackName = 'game') {
+  if (!audioCtx || !soundOn) return;
+  if (bgmTimer && currentTrack === trackName) return; // already playing this track
+  stopBgm();
+  currentTrack = trackName;
+  const t = TRACKS[trackName];
+  bgmStep = 0;
+  bgmTimer = setInterval(() => {
+    if (!soundOn || !audioCtx) return;
+    const i = bgmStep % t.melody.length;
+    const mel = t.melody[i] ? NOTE[t.melody[i]] : null;
+    if (mel) tone(mel, t.interval / 1000 * 0.85, t.melType, t.melVol);
+    const bass = t.bass[i] ? NOTE[t.bass[i]] : null;
+    if (bass) tone(bass, t.interval / 1000 * 1.6, 'triangle', t.bassVol);
+    if (t.drum && t.drum[i]) drumHit(t.drum[i]);
+    bgmStep++;
+  }, t.interval);
+}
+function stopBgm() {
+  if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; }
+  currentTrack = null;
+}
+
+soundToggleEl.addEventListener('click', () => {
+  soundOn = !soundOn;
+  soundToggleEl.textContent = soundOn ? '🔊' : '🔇';
+  if (soundOn) { initAudio(); startBgm(running ? 'game' : 'home'); }
+  else stopBgm();
+});
+// Browsers block audio until the user interacts, so kick off the home BGM
+// on the first tap/click. Stays armed until audio is truly running, since the
+// first resume() can be rejected on some mobile browsers.
+function primeHomeAudio() {
+  initAudio();
+  if (!audioCtx) return;
+  const go = () => {
+    if (audioCtx.state !== 'running') return; // still blocked; stay armed
+    window.removeEventListener('pointerdown', primeHomeAudio);
+    window.removeEventListener('touchstart', primeHomeAudio);
+    window.removeEventListener('click', primeHomeAudio);
+    if (!running) startBgm('home');
+  };
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().then(go).catch(() => {});
+  } else {
+    go();
+  }
+}
+window.addEventListener('pointerdown', primeHomeAudio);
+window.addEventListener('touchstart', primeHomeAudio);
+window.addEventListener('click', primeHomeAudio);
+// Stop the music when the tab/app goes to the background, and pick it back up
+// on return. Without this the BGM keeps looping behind other apps.
+let bgmTrackBeforeHide = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    bgmTrackBeforeHide = currentTrack;
+    stopBgm();
+    if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+    // pause the run so you don't return to an already-lost game.
+    // pauseGame() shows the overlay, so returning players resume deliberately.
+    if (running && !dying) pauseGame();
+  } else {
+    if (!soundOn) return;
+    const resume = () => {
+      // paused runs stay silent until the player hits 再開
+      if (!paused) startBgm(running ? 'game' : (bgmTrackBeforeHide || 'home'));
+      bgmTrackBeforeHide = null;
+    };
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().then(resume).catch(() => {});
+    } else {
+      resume();
+    }
+  }
+});
+// ---------- /AUDIO ----------
+
+let W, H, dpr;
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+let best = 0, running = false, score = 0, scoreAcc = 0, frame = 0, diff = 0;
+// Ranking persists via localStorage when the page is served from a real URL.
+// Wrapped in try/catch so it degrades to session-only if storage is blocked.
+const STORE_KEY = 'yokemakuri_scores_v1';
+function loadScores() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter(n => Number.isFinite(n)).slice(0, 5) : [];
+  } catch (e) { return []; }
+}
+function saveScores(arr) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(arr)); } catch (e) { /* storage unavailable */ }
+}
+let topScores = loadScores(); // high score ranking (persisted when possible)
+let enemies = [], items = [], particles = [], stars = [], shake = 0;
+let floatTexts = []; // floating score popups
+let dying = false, dyingTimer = 0, deathBlock = null;
+let animTick = 0; // always advances, even when the game isn't running
+let shieldCount = 0, invincTimer = 0, thinTimer = 0;
+const MAX_SHIELDS = 3;
+const SHIELD_OVERFLOW_BONUS = 150; // points for picking up a shield while already maxed
+let doubleTimer = 0, megaThinTimer = 0;
+let itemsCollected = 0;   // reward 1: more items -> faster bomb
+let survivalStreak = 0;   // reward 2: frames survived -> fewer blocks
+let bombCharge = 0;       // 0..1, fills as you survive, auto-fires at 1
+let bombFlash = 0;        // white flash effect on detonate
+let flashColor = '255,240,200'; // rgb of the current screen flash
+const BOMB_FILL_PER_FRAME = 1 / (60 * 12); // ~12 seconds of survival to fill
+
+const BASE_R = 16;
+const player = { x: W/2, y: 0, r: BASE_R, tx: W/2, ty: 0 };
+const FINGER_OFFSET = 46; // draw ball above finger so it's not hidden
+
+// weight = base rarity. rare power-ups have low weights.
+const ITEM_TYPES = {
+  shield: { color: '#4dd4ff', label: 'S',  weight: 32, minScore: 0 },
+  thin:   { color: '#ffa94d', label: '▽',  weight: 32, minScore: 0 },   // fewer blocks spawn
+  invinc: { color: '#ffd22e', label: '★',  weight: 12, minScore: 0 },   // Mario-star yellow
+  // --- rare power-ups (low weight) ---
+  clear:  { color: '#ff6b35', label: '💥', weight: 4, minScore: 0,   rare: true }, // all-clear + full bomb
+  double: { color: '#ff4d6d', label: '×2', weight: 4, minScore: 0,   rare: true }, // score x2 for a while
+  megainv:{ color: '#ffb800', label: '🌟', weight: 3, minScore: 0,   rare: true }, // extra-long invincible (gold star)
+  megathin:{color: '#5cff9d', label: '🍃', weight: 4, minScore: 120, rare: true }  // big block reduction, long (green)
+};
+
+function initStars() {
+  stars = [];
+  for (let i = 0; i < 40; i++)
+    stars.push({ x: Math.random()*W, y: Math.random()*H, s: Math.random()*1.6+0.4, v: Math.random()*0.4+0.15 });
+}
+initStars();
+
+function reset() {
+  score = 0; scoreAcc = 0; frame = 0; diff = 0;
+  enemies = []; items = []; particles = []; shake = 0;
+  floatTexts = [];
+  dying = false; dyingTimer = 0; deathBlock = null;
+  shieldCount = 0; invincTimer = 0; thinTimer = 0;
+  doubleTimer = 0; megaThinTimer = 0;
+  itemsCollected = 0; survivalStreak = 0;
+  bombCharge = 0; bombFlash = 0;
+  updateBombUI();
+  player.x = W/2; player.tx = W/2; player.y = H - 120; player.ty = H - 120; player.r = BASE_R;
+}
+
+function spawnEnemy() {
+  const size = 18 + Math.random() * 26;
+  const speed = 3 + diff * 0.0011 + Math.random() * 2; // gentler speed increase
+  enemies.push({
+    x: Math.random() * (W - size) + size/2, y: -size, r: size/2, v: speed,
+    hue: 200 + Math.random()*60, rot: Math.random()*Math.PI, vr: (Math.random()-0.5)*0.1
+  });
+}
+
+function pickItemType() {
+  const avail = Object.entries(ITEM_TYPES).filter(([,t]) => diff >= t.minScore);
+  const total = avail.reduce((a,[,t])=>a+t.weight,0);
+  let r = Math.random() * total;
+  for (const [key, t] of avail) {
+    if (r < t.weight) return key;
+    r -= t.weight;
+  }
+  return 'shield';
+}
+
+function spawnItem() {
+  const type = pickItemType();
+  const rare = ITEM_TYPES[type].rare;
+  const size = rare ? 30 : 24;
+  items.push({
+    x: Math.random() * (W - size*2) + size, y: -size, r: size,
+    v: rare ? 2.3 : 2.6, type, bob: Math.random()*Math.PI*2, rare
+  });
+}
+
+function floatText(x, y, text, color) {
+  floatTexts.push({ x, y, text, color, life: 1 });
+}
+
+const MAX_PARTICLES = 260; // keeps frame rate stable on weaker phones
+function burst(x, y, color, n=22) {
+  if (particles.length > MAX_PARTICLES) n = Math.max(4, n >> 1);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, s = Math.random() * 6 + 1;
+    particles.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s, life: 1, color });
+  }
+  if (particles.length > MAX_PARTICLES) {
+    particles.splice(0, particles.length - MAX_PARTICLES);
+  }
+}
+
+function updateBombUI() {
+  bombFill.style.width = Math.round(bombCharge * 100) + '%';
+}
+
+function autoDetonateBomb() {
+  // clear every block on screen, each pops with particles
+  for (const e of enemies) burst(e.x, e.y, `hsl(${e.hue},16%,70%)`, 10);
+  enemies = [];
+  // shockwave ring bursting out from the player
+  for (let a = 0; a < 40; a++) {
+    const ang = (a / 40) * Math.PI * 2;
+    const spd = 9 + Math.random() * 4;
+    particles.push({
+      x: player.x, y: player.y,
+      vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+      life: 1, color: '#ffb450'
+    });
+  }
+  flashColor = '255,200,120';
+  bombFlash = 1;
+  shake = 20;
+  bombCharge = 0;
+  updateBombUI();
+  SFX.bomb();
+}
+
+let pointerActive = false;
+function move(clientX, clientY) {
+  player.tx = Math.max(player.r, Math.min(W - player.r, clientX));
+  const topMargin = 118; // keep below HUD score + effect pills
+  const yTarget = clientY - FINGER_OFFSET;
+  player.ty = Math.max(topMargin, Math.min(H - player.r - 20, yTarget));
+}
+
+canvas.addEventListener('touchstart', e => { e.preventDefault(); pointerActive = true; move(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); if(pointerActive) move(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+canvas.addEventListener('touchend', e => { e.preventDefault(); pointerActive = false; }, {passive:false});
+canvas.addEventListener('mousedown', e => { pointerActive = true; move(e.clientX, e.clientY); });
+canvas.addEventListener('mousemove', e => { if(pointerActive) move(e.clientX, e.clientY); });
+window.addEventListener('mouseup', () => pointerActive = false);
+
+// ---------- PAUSE ----------
+let paused = false;
+const pauseScreen = document.getElementById('pauseScreen');
+const pauseBtn = document.getElementById('pauseBtn');
+
+function pauseGame() {
+  if (!running || paused || dying) return;
+  paused = true;
+  running = false;
+  stopBgm();
+  pauseScreen.classList.remove('hidden');
+}
+function resumeGame() {
+  if (!paused) return;
+  paused = false;
+  running = true;
+  pauseScreen.classList.add('hidden');
+  invincTimer = Math.max(invincTimer, 60); // 1s of safety on resume
+  if (soundOn) startBgm('game');
+}
+function quitToHome() {
+  paused = false;
+  running = false;
+  bombFlash = 0;
+  statusBar.innerHTML = '';
+  pauseScreen.classList.add('hidden');
+  bombBtn.classList.add('hidden');
+  pauseBtn.classList.add('hidden');
+  startScreen.classList.remove('hidden');
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'game'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-game'));
+  if (soundOn) startBgm('home');
+}
+pauseBtn.addEventListener('click', pauseGame);
+document.getElementById('resumeBtn').addEventListener('click', resumeGame);
+document.getElementById('quitBtn').addEventListener('click', quitToHome);
+
+// ---------- KEYBOARD (desktop) ----------
+const keys = {};
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === ' ' || k === 'escape') {
+    e.preventDefault();
+    if (paused) resumeGame();
+    else if (running) pauseGame();
+    else if (!dying && !startScreen.classList.contains('hidden')) startGame();
+    return;
+  }
+  if (k === 'enter' && !gameOverScreen.classList.contains('hidden')) {
+    e.preventDefault(); startGame(); return;
+  }
+  if (['arrowleft','arrowright','arrowup','arrowdown','a','d','w','s'].includes(k)) {
+    e.preventDefault();
+    keys[k] = true;
+  }
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+const KEY_SPEED = 9;
+function applyKeyboard() {
+  let dx = 0, dy = 0;
+  if (keys['arrowleft'] || keys['a']) dx -= 1;
+  if (keys['arrowright'] || keys['d']) dx += 1;
+  if (keys['arrowup'] || keys['w']) dy -= 1;
+  if (keys['arrowdown'] || keys['s']) dy += 1;
+  if (!dx && !dy) return;
+  if (dx && dy) { dx *= 0.707; dy *= 0.707; } // keep diagonal speed even
+  player.tx = Math.max(player.r, Math.min(W - player.r, player.tx + dx * KEY_SPEED));
+  player.ty = Math.max(118, Math.min(H - player.r - 20, player.ty + dy * KEY_SPEED));
+}
+
+function startGame() {
+  initAudio();
+  reset(); running = true;
+  paused = false;
+  pauseScreen.classList.add('hidden');
+  startScreen.classList.add('hidden');
+  gameOverScreen.classList.add('hidden');
+  bombBtn.classList.remove('hidden');
+  pauseBtn.classList.remove('hidden');
+  // resume can be async on mobile; start BGM once audio is actually running
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume().then(() => startBgm('game')).catch(() => startBgm('game'));
+  } else {
+    startBgm('game');
+  }
+}
+// share score on X
+document.getElementById('shareBtn').addEventListener('click', () => {
+  const text = `「よけまくり」で ${score} 点を記録しました！`;
+  // location.href works once the game is hosted; harmless when opened locally
+  const url = /^https?:/.test(location.href) ? location.href.split('?')[0] : '';
+  const params = new URLSearchParams({ text: text + (url ? '' : ' #よけまくり') });
+  if (url) { params.set('url', url); params.set('hashtags', 'よけまくり'); }
+  window.open('https://twitter.com/intent/tweet?' + params.toString(), '_blank');
+});
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+
+// home screen tabs
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const name = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'panel-' + name);
+    });
+  });
+});
+
+// return to home from the game over screen
+document.getElementById('homeBtn').addEventListener('click', () => {
+  gameOverScreen.classList.add('hidden');
+  startScreen.classList.remove('hidden');
+  // always land on the game tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'game'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-game'));
+  startBgm('home');
+});
+
+function pickComment(s, isNew) {
+  let pool;
+  if (s >= 15000)     pool = ['神話級…！人類の限界を超えた！', 'もはや伝説。語り継がれるスコア！', '信じられない、これが最高峰か…！'];
+  else if (s >= 10000) pool = ['神業！5桁の大台突破！', 'レジェンド級のスコア！', '達人だ…！本物の腕前！'];
+  else if (s >= 6000) pool = ['すごいスコアです！', '見事な避けっぷり！', 'かなりの手練れ！'];
+  else if (s >= 3500) pool = ['いい感じ！乗ってきた！', 'ナイスプレイ！', 'その調子で上を目指せ！'];
+  else if (s >= 1800) pool = ['なかなかやるね！', 'いい動きだった！', '安定してきた！'];
+  else if (s >= 700)  pool = ['惜しい！あと少し！', 'つかめてきた？', 'ウォームアップ完了！'];
+  else if (s >= 200)  pool = ['まだまだこれから！', 'まずは慣らし運転！', 'コツをつかもう！'];
+  else                pool = ['どんまい！次いこう！', '油断は禁物だね', '上を目指して再挑戦！'];
+  if (isNew) pool = pool.map(c => c + ' 🏆最高記録！');
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+const HINTS = [
+  '💡 玉を画面の上の方で動かすほど、スコアが多く入るよ（最大2倍）。',
+  '💡 シールドは最大3枚まで重ねて持てる。3枚ある時に拾うと+150点になるよ。',
+  '💡 アイテムを取るほどスコア倍率が上がる。序盤の回収が効いてくる。',
+  '💡 ボムは避け続けると自動で溜まって、満タンで全消し。粘るほど頼れる。',
+  '💡 ★の無敵を取ったら、その間は上に張り付いて一気に稼ぐチャンス。',
+  '💡 レア（大きく光るアイテム）は強力。少し無理してでも取る価値あり。',
+  '💡 下の方は安全だけど点は伸びない。上下を使い分けるのがコツ。'
+];
+function pickHint() {
+  return HINTS[Math.floor(Math.random() * HINTS.length)];
+}
+
+function refreshBestDisplays() {
+  best = topScores.length ? topScores[0] : 0;
+  bestEl.textContent = 'BEST ' + best;
+  const homeBestEl = document.getElementById('homeBest');
+  if (homeBestEl) homeBestEl.textContent = best > 0 ? '🏆 ベスト ' + best : '';
+}
+
+function gameOver() {
+  running = false;
+  // switch to the calm home theme once the death sound has landed
+  setTimeout(() => { if (!running && !dying) startBgm('home'); }, 600);
+
+  const hadScores = topScores.length > 0;
+  const prevTop = hadScores ? topScores[0] : -1;
+  // new best only if there was a previous record AND we strictly beat it
+  const isNew = hadScores && score > prevTop;
+
+  // insert this score into the ranking
+  topScores.push(score);
+  topScores.sort((a, b) => b - a);
+  topScores = topScores.slice(0, 5);
+  saveScores(topScores);
+  refreshBestDisplays();
+
+  finalScoreEl.textContent = score;
+  commentEl.textContent = pickComment(score, isNew);
+  adviceEl.textContent = score < 1800 ? pickHint() : '';
+  newBestEl.classList.toggle('hidden', !isNew);
+  if (isNew) SFX.best(); // death sound already played at the moment of impact
+
+  // find which ranking row is the one we just set (first match at our score)
+  let marked = false;
+  let rows = '<div class="rank-title">RANKING</div>';
+  for (let i = 0; i < 5; i++) {
+    if (i < topScores.length) {
+      const isCurrent = !marked && topScores[i] === score;
+      if (isCurrent) marked = true;
+      rows += `<div class="rank-row${isCurrent ? ' current' : ''}"><span class="pos">${i+1}</span><span class="val">${topScores[i]}</span></div>`;
+    } else {
+      rows += `<div class="rank-row empty"><span class="pos">${i+1}</span><span class="val">—</span></div>`;
+    }
+  }
+  rankingEl.innerHTML = rows;
+
+  statusBar.innerHTML = '';
+  bombBtn.classList.add('hidden');
+  pauseBtn.classList.add('hidden');
+  setTimeout(() => gameOverScreen.classList.remove('hidden'), 350);
+}
+
+const RARE_LABELS = {
+  clear:   '全消し！',
+  double:  'スコア×2！',
+  megainv: '特大無敵！',
+  megathin:'ブロック激減！'
+};
+function hexToRgbStr(hex) {
+  const h = hex.replace('#','');
+  const n = parseInt(h, 16);
+  return `${(n>>16)&255},${(n>>8)&255},${n&255}`;
+}
+
+function collectItem(it) {
+  const t = ITEM_TYPES[it.type];
+  itemsCollected++;
+  burst(it.x, it.y, t.color, it.rare ? 34 : 18);
+  const sfxName = ITEM_SFX[it.type];
+  if (sfxName && SFX[sfxName]) SFX[sfxName]();
+
+  // rare pickups get a screen flash in their own colour + a name popup
+  if (it.rare) {
+    flashColor = hexToRgbStr(t.color);
+    bombFlash = 0.75;
+    shake = 10;
+    floatText(it.x, it.y - 8, RARE_LABELS[it.type] || '', t.color);
+  }
+
+  if (it.type === 'shield') {
+    if (shieldCount >= MAX_SHIELDS) {
+      // already maxed: convert the extra shield into points
+      scoreAcc += SHIELD_OVERFLOW_BONUS;
+      floatText(it.x, it.y, '+' + SHIELD_OVERFLOW_BONUS, '#4dd4ff');
+    } else {
+      shieldCount++;
+    }
+  }
+  else if (it.type === 'thin') thinTimer = 480;
+  else if (it.type === 'invinc') invincTimer = 300;
+  else if (it.type === 'clear') {
+    // wipe the screen and instantly fill the bomb
+    for (const e of enemies) burst(e.x, e.y, `hsl(${e.hue},16%,70%)`, 10);
+    enemies = [];
+    bombFlash = 1; shake = 18; // colour already set by the rare-pickup flash
+    bombCharge = 1; // next bomb ready immediately
+    updateBombUI();
+  }
+  else if (it.type === 'double') doubleTimer = 480;   // 8s score x2
+  else if (it.type === 'megainv') invincTimer = 600;  // double-length invincible
+  else if (it.type === 'megathin') megaThinTimer = 720; // 12s strong block reduction
+}
+
+function updateStatusBar() {
+  let html = '';
+  if (doubleTimer > 0) html += `<div class="status-pill" style="background:#ff4d6d;color:#fff">スコア×2 ${Math.ceil(doubleTimer/60)}</div>`;
+  if (invincTimer > 0) html += `<div class="status-pill" style="background:#ffd22e">無敵 ${Math.ceil(invincTimer/60)}</div>`;
+  if (shieldCount > 0) html += `<div class="status-pill" style="background:#4dd4ff">シールド${shieldCount > 1 ? ' ×' + shieldCount : ''}</div>`;
+  if (megaThinTimer > 0) html += `<div class="status-pill" style="background:#5cff9d">ブロック激減 ${Math.ceil(megaThinTimer/60)}</div>`;
+  else if (thinTimer > 0) html += `<div class="status-pill" style="background:#ffa94d">ブロック減 ${Math.ceil(thinTimer/60)}</div>`;
+  statusBar.innerHTML = html;
+}
+
+function update() {
+  frame++;
+  // shared difficulty clock (seconds survived, scaled). Used for speed, spawns, items, bomb.
+  diff = frame / 6;
+  // score grows faster over time, but more gently than before.
+  const elapsedSec = frame / 60;
+  let pointsPerFrame = (10 + elapsedSec * 0.5) / 60; // ~10/s at start, +~0.5/s each second
+  // REWARD 1: collecting items raises a permanent score multiplier (rewards effort, not survival cheese).
+  const itemMult = 1 + Math.min(1.0, itemsCollected * 0.06); // up to +100% with ~17 items
+  pointsPerFrame *= itemMult;
+  // HEIGHT BONUS: the higher up the screen you play, the more points (riskier = more reward).
+  // 1x near the bottom, up to ~2x near the top.
+  const topY = 118, botY = H - 20;
+  const heightFrac = Math.max(0, Math.min(1, (botY - player.y) / (botY - topY)));
+  const heightMult = 1 + heightFrac * 1.0;
+  pointsPerFrame *= heightMult;
+  if (doubleTimer > 0) pointsPerFrame *= 2; // score x2 power-up
+  scoreAcc += pointsPerFrame;
+  score = Math.floor(scoreAcc);
+  scoreEl.textContent = score;
+  // show the live score multiplier (item x height x double)
+  const totalMult = itemMult * heightMult * (doubleTimer > 0 ? 2 : 1);
+  multTagEl.textContent = '×' + totalMult.toFixed(1);
+  multTagEl.classList.toggle('hot', totalMult >= 1.8);
+
+  if (invincTimer > 0) invincTimer--;
+  if (thinTimer > 0) thinTimer--;
+  if (doubleTimer > 0) doubleTimer--;
+  if (megaThinTimer > 0) megaThinTimer--;
+
+  // bomb charges over time. Slow at first, ramping up so the early game rarely gets a bomb.
+  // earlyFactor goes 0.35 -> 1.0 over roughly the first ~200 diff (~early game).
+  // A hard cap keeps the bomb from ever refilling faster than ~9s, so it stays a lifeline
+  // rather than a rapid auto-clear that lets you survive forever without dodging.
+  const earlyFactor = Math.min(1, 0.35 + diff / 200 * 0.65);
+  const MAX_CHARGE_RATE = 1 / (60 * 9); // never faster than 9 seconds per bomb
+  const chargeRate = Math.min(MAX_CHARGE_RATE, BOMB_FILL_PER_FRAME * earlyFactor * (1 + diff * 0.0015));
+  bombCharge = Math.min(1, bombCharge + chargeRate);
+  if (bombCharge >= 1) autoDetonateBomb();
+  else updateBombUI();
+  if (bombFlash > 0) bombFlash *= 0.86;
+  const speedFactor = 1;
+
+  // REWARD 2: surviving eases block density slightly (a small breather, not a difficulty freeze).
+  survivalStreak++;
+  const survivalRelief = 1 + Math.min(0.3, survivalStreak / 3600 * 0.3); // up to +30% spacing after ~60s
+  // thin items: fewer blocks spawn. megathin is much stronger.
+  const thinFactor = (megaThinTimer > 0 ? 4.0 : (thinTimer > 0 ? 2.0 : 1)) * survivalRelief;
+  // WARMUP: ease players in for the first ~10s so the opening isn't brutal.
+  // Fades from very sparse to normal instead of snapping, so there's no difficulty cliff.
+  const warmSec = frame / 60;
+  const warmup = warmSec < 10 ? 1 + (1 - warmSec / 10) * 1.6 : 1;
+  const rate = Math.max(16, 42 - diff * 0.03) * thinFactor * warmup; // gentler tightening
+  if (frame % Math.floor(rate) === 0) spawnEnemy();
+  if (diff > 260 && thinTimer <= 0 && megaThinTimer <= 0 && frame % Math.floor(rate*1.8) === 0) spawnEnemy();
+  // items less frequent now (~ every 7.5s)
+  if (frame % 330 === 0 && frame > 0) spawnItem();
+
+  applyKeyboard();
+  player.x += (player.tx - player.x) * 0.35;
+  player.y += (player.ty - player.y) * 0.35;
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    e.y += e.v * speedFactor; e.rot += e.vr;
+    const dx = e.x - player.x, dy = e.y - player.y;
+    if (Math.hypot(dx, dy) < e.r + player.r - 4) {
+      if (invincTimer > 0) {
+        burst(e.x, e.y, '#ffd22e', 14);
+        enemies.splice(i, 1);
+        continue;
+      }
+      if (shieldCount > 0) {
+        shieldCount--;
+        burst(e.x, e.y, '#4dd4ff', 20);
+        SFX.shield();
+        enemies.splice(i, 1);
+        shake = 8;
+        continue;
+      }
+      // slow-motion death: freeze the moment so you can see what hit you
+      shake = 16;
+      running = false;
+      dying = true;
+      dyingTimer = 40; // ~0.65s at the slowed rate
+      deathBlock = { x: e.x, y: e.y, r: e.r, hue: e.hue };
+      SFX.over();
+      stopBgm();
+      return;
+    }
+    if (e.y > H + e.r) enemies.splice(i, 1);
+  }
+
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    it.y += it.v; it.bob += 0.1;
+    const dx = it.x - player.x, dy = it.y - player.y;
+    if (Math.hypot(dx, dy) < it.r + player.r) {
+      collectItem(it); items.splice(i, 1); continue;
+    }
+    if (it.y > H + it.r) items.splice(i, 1);
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.life -= 0.025;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+
+  for (let i = floatTexts.length - 1; i >= 0; i--) {
+    const ft = floatTexts[i];
+    ft.y -= 1.2; ft.life -= 0.014;
+    if (ft.life <= 0) floatTexts.splice(i, 1);
+  }
+
+  for (const s of stars) { s.y += s.v; if (s.y > H) { s.y = 0; s.x = Math.random()*W; } }
+  if (shake > 0) shake *= 0.85;
+  updateStatusBar();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  if (shake > 0.5) ctx.translate((Math.random()-0.5)*shake, (Math.random()-0.5)*shake);
+
+  // high-score zone: warm glow toward the top, so "up = more points" reads at a glance
+  if (running || dying) {
+    const zoneTop = 118, zoneBot = H - 20;
+    const zg = ctx.createLinearGradient(0, zoneTop, 0, zoneBot);
+    zg.addColorStop(0, 'rgba(255,196,60,0.13)');
+    zg.addColorStop(0.45, 'rgba(255,196,60,0.03)');
+    zg.addColorStop(1, 'rgba(255,196,60,0)');
+    ctx.fillStyle = zg;
+    ctx.fillRect(0, zoneTop, W, zoneBot - zoneTop);
+    // marker line at the very top of the bonus zone
+    ctx.strokeStyle = 'rgba(255,212,92,0.28)';
+    ctx.lineWidth = 1; ctx.setLineDash([6, 8]);
+    ctx.beginPath(); ctx.moveTo(0, zoneTop); ctx.lineTo(W, zoneTop); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  for (const s of stars) {
+    ctx.globalAlpha = 0.5; ctx.fillStyle = '#8ea0d8';
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.s, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  for (const e of enemies) {
+    ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.rot);
+    const s = e.r;
+    // solid steel look: no coloured glow, so glowing items always read as "collect"
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 10;
+    const g = ctx.createLinearGradient(-s, -s, s, s);
+    g.addColorStop(0, `hsl(${e.hue},14%,62%)`);
+    g.addColorStop(1, `hsl(${e.hue},18%,38%)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(-s, -s, s*2, s*2);
+    ctx.shadowBlur = 0;
+    // bevel: light top-left edge, dark bottom-right edge
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-s, s); ctx.lineTo(-s, -s); ctx.lineTo(s, -s); ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.moveTo(s, -s); ctx.lineTo(s, s); ctx.lineTo(-s, s); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.shadowBlur = 0;
+
+  // during death, mark the block that got you
+  if (dying && deathBlock) {
+    const pulse = 0.5 + Math.sin(animTick * 0.25) * 0.5;
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,80,80,${0.6 + pulse * 0.4})`;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#ff5050'; ctx.shadowBlur = 20;
+    ctx.beginPath();
+    ctx.arc(deathBlock.x, deathBlock.y, deathBlock.r + 10 + pulse * 4, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  for (const it of items) {
+    const t = ITEM_TYPES[it.type];
+    const bob = Math.sin(it.bob) * 2;
+    ctx.save(); ctx.translate(it.x, it.y + bob);
+    // rare items get an extra pulsing halo
+    if (it.rare) {
+      const pulse = 6 + Math.sin(frame * 0.2) * 4;
+      ctx.strokeStyle = t.color; ctx.lineWidth = 2;
+      ctx.shadowColor = t.color; ctx.shadowBlur = 24;
+      ctx.beginPath(); ctx.arc(0, 0, it.r + pulse, 0, Math.PI*2); ctx.stroke();
+    }
+    ctx.shadowColor = t.color; ctx.shadowBlur = it.rare ? 26 : 18;
+    ctx.fillStyle = t.color;
+    const r = it.r;
+    ctx.beginPath();
+    ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#0a0e1a'; ctx.font = `bold ${it.rare ? 22 : 20}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(t.label, 0, 1);
+    ctx.restore();
+  }
+
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // floating score popups
+  for (const ft of floatTexts) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, ft.life * 1.5));
+    ctx.fillStyle = ft.color;
+    ctx.font = 'bold 22px -apple-system, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = ft.color; ctx.shadowBlur = 12;
+    ctx.fillText(ft.text, ft.x, ft.y);
+    ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+
+  if (running || dying) {
+    // invincible aura (Mario-star gold)
+    if (invincTimer > 0) {
+      const pulse = 6 + Math.sin(frame*0.3)*3;
+      ctx.strokeStyle = 'rgba(255,210,46,0.95)'; ctx.lineWidth = 3;
+      ctx.shadowColor = '#ffd22e'; ctx.shadowBlur = 22;
+      ctx.beginPath(); ctx.arc(player.x, player.y, player.r + pulse, 0, Math.PI*2); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    // shield rings: one concentric ring per stacked shield
+    if (shieldCount > 0) {
+      ctx.strokeStyle = 'rgba(77,212,255,0.9)'; ctx.lineWidth = 3;
+      ctx.shadowColor = '#4dd4ff'; ctx.shadowBlur = 16;
+      for (let sIdx = 0; sIdx < shieldCount; sIdx++) {
+        ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 7 + sIdx * 5, 0, Math.PI*2); ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    }
+    ctx.shadowColor = invincTimer > 0 ? 'rgba(255,210,46,0.95)' : 'rgba(92,140,255,0.9)';
+    ctx.shadowBlur = 20;
+    const grad = ctx.createRadialGradient(player.x, player.y, 2, player.x, player.y, player.r);
+    if (invincTimer > 0) { grad.addColorStop(0, '#fff2b0'); grad.addColorStop(1, '#ffd22e'); }
+    else { grad.addColorStop(0, '#bcd0ff'); grad.addColorStop(1, '#5c8cff'); }
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(player.x, player.y, player.r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // control hint fades in at the start of a run, then gets out of the way
+  if (running && frame < 210) {
+    ctx.globalAlpha = Math.max(0, frame < 150 ? 0.55 : (210 - frame) / 60 * 0.55);
+    ctx.fillStyle = '#eaf0ff';
+    ctx.font = 'bold 15px -apple-system, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('なぞって移動', W / 2, H - 78);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+
+  // bomb detonation flash (drawn over everything, outside shake transform)
+  if (bombFlash > 0.02) {
+    ctx.fillStyle = `rgba(${flashColor},${bombFlash * 0.8})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function updateDying() {
+  // slow-motion: blocks crawl, particles keep going, then results appear
+  dyingTimer--;
+  for (const e of enemies) e.y += e.v * 0.12;
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * 0.3; p.y += p.vy * 0.3; p.vy += 0.05; p.life -= 0.012;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  if (shake > 0) shake *= 0.9;
+  if (dyingTimer <= 0) {
+    dying = false;
+    burst(player.x, player.y, '#5c8cff', 30);
+    gameOver();
+  }
+}
+
+function loop() {
+  animTick++;
+  if (running) update();
+  else if (dying) updateDying();
+  draw();
+  requestAnimationFrame(loop);
+}
+refreshBestDisplays();
+loop();
+</script>
+</body>
+</html>
