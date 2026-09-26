@@ -186,6 +186,24 @@
   .home-best:empty { display: none; }
   .btn:active { transform: scale(0.94); }
   .hint { margin-top: 28px; font-size: 13px; color: #5a6690; letter-spacing: 0.04em; }
+  /* player (account) selector on the home screen */
+  .player-row { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
+  .player-seg {
+    display: flex; gap: 4px;
+    background: rgba(255,255,255,0.05); padding: 4px; border-radius: 100px;
+  }
+  .pl-btn {
+    background: transparent; border: none; color: #8b96c4; font-family: inherit;
+    font-size: 13px; font-weight: 700; padding: 7px 12px; border-radius: 100px;
+    cursor: pointer; min-width: 44px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+  .pl-btn.active { background: #3fbf8f; color: #fff; }
+  .pl-edit {
+    background: rgba(255,255,255,0.06); border: none; border-radius: 100px;
+    width: 34px; height: 34px; font-size: 14px; cursor: pointer; padding: 0;
+  }
+  .pl-edit:active { transform: scale(0.9); }
   /* difficulty selector on the home screen */
   .lv-seg {
     display: flex; gap: 6px; margin-bottom: 22px;
@@ -240,6 +258,14 @@
 
     <div class="tab-panel active" id="panel-game">
       <div class="tagline">落ちてくるブロックをよけろ。<br>指で動かすだけ。上に行くほど高得点。</div>
+      <div class="player-row">
+        <div class="player-seg" id="playerSeg">
+          <button class="pl-btn" data-pl="0"></button>
+          <button class="pl-btn" data-pl="1"></button>
+          <button class="pl-btn" data-pl="2"></button>
+        </div>
+        <button class="pl-edit" id="renameBtn" aria-label="名前を変える">✏️</button>
+      </div>
       <div class="home-best" id="homeBest"></div>
       <div class="lv-seg" id="levelSeg">
         <button class="lv-btn" data-lv="easy">やさしい<small>点×0.7</small></button>
@@ -572,9 +598,29 @@ const LEVELS = {
   normal: { label: 'ふつう',     ramp: 1.0, spawn: 1.0, speed: 1.0,  score: 1.0 },
   hard:   { label: 'むずかしい', ramp: 1.3, spawn: 0.8, speed: 1.15, score: 1.3 },
 };
-const LEVEL_KEY = 'yokemakuri_level_v1';
-let level = 'normal';
-try { const v = localStorage.getItem(LEVEL_KEY); if (LEVELS[v]) level = v; } catch (e) { /* default normal */ }
+const LEVEL_KEY = 'yokemakuri_level_v1'; // pre-player setting; only read once to seed player 1
+// PLAYERS: up to 3 people can share one phone. Each has a name, a difficulty and
+// their own ranking. Player 1 keeps the original ranking key so old records stay theirs.
+const PLAYER_KEY = 'yokemakuri_players_v1';
+const PLAYER_COUNT = 3;
+let players = { cur: 0, names: ['1P', '2P', '3P'], levels: ['normal', 'normal', 'normal'] };
+try {
+  const saved = JSON.parse(localStorage.getItem(PLAYER_KEY) || 'null');
+  if (saved && Array.isArray(saved.names)) {
+    for (let i = 0; i < PLAYER_COUNT; i++) {
+      if (typeof saved.names[i] === 'string' && saved.names[i]) players.names[i] = saved.names[i];
+      if (saved.levels && LEVELS[saved.levels[i]]) players.levels[i] = saved.levels[i];
+    }
+    if (saved.cur >= 0 && saved.cur < PLAYER_COUNT) players.cur = saved.cur;
+  } else {
+    const v = localStorage.getItem(LEVEL_KEY);
+    if (LEVELS[v]) players.levels[0] = v;
+  }
+} catch (e) { /* defaults */ }
+function savePlayers() {
+  try { localStorage.setItem(PLAYER_KEY, JSON.stringify(players)); } catch (e) { /* storage unavailable */ }
+}
+let level = players.levels[players.cur];
 let hardness = 0; // diff scaled by the level's ramp; drives block speed/density only
 let levelMods = { ramp: 1, spawn: 1, speed: 1 }; // current block-pace modifiers (after catch-up)
 function updateLevelMods() {
@@ -592,9 +638,11 @@ const STORE_KEY = 'yokemakuri_scores_v1';
 // Entries are {s: score, lv: level}. Old saves are plain numbers (all played before
 // levels existed = normal). Normal entries are still saved as plain numbers so the
 // data stays readable by the older version.
+// player 1 = the original key (never rename it), players 2 and 3 get their own keys
+function scoreKey() { return players.cur === 0 ? STORE_KEY : STORE_KEY + '_p' + (players.cur + 1); }
 function loadScores() {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = localStorage.getItem(scoreKey());
     if (!raw) return [];
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return [];
@@ -605,7 +653,7 @@ function loadScores() {
 }
 function saveScores(arr) {
   const out = arr.map(e => e.lv === 'normal' ? e.s : { s: e.s, lv: e.lv });
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(out)); } catch (e) { /* storage unavailable */ }
+  try { localStorage.setItem(scoreKey(), JSON.stringify(out)); } catch (e) { /* storage unavailable */ }
 }
 let topScores = loadScores(); // high score ranking (persisted when possible)
 let enemies = [], items = [], particles = [], stars = [], shake = 0;
@@ -854,10 +902,41 @@ function refreshLevelButtons() {
 }
 levelBtns.forEach(b => b.addEventListener('click', () => {
   level = b.dataset.lv;
-  try { localStorage.setItem(LEVEL_KEY, level); } catch (e) { /* storage unavailable */ }
+  players.levels[players.cur] = level;
+  savePlayers();
   refreshLevelButtons();
 }));
 refreshLevelButtons();
+
+// player switcher: tap a name to switch, ✏️ to rename the current player
+const playerBtns = document.querySelectorAll('.pl-btn');
+function refreshPlayerButtons() {
+  playerBtns.forEach(b => {
+    const i = +b.dataset.pl;
+    b.textContent = players.names[i];
+    b.classList.toggle('active', i === players.cur);
+  });
+}
+function switchPlayer(i) {
+  players.cur = i;
+  level = players.levels[i];
+  savePlayers();
+  topScores = loadScores();
+  refreshPlayerButtons();
+  refreshLevelButtons();
+  refreshBestDisplays();
+}
+playerBtns.forEach(b => b.addEventListener('click', () => switchPlayer(+b.dataset.pl)));
+document.getElementById('renameBtn').addEventListener('click', () => {
+  const name = prompt('名前を入れてください（6文字まで）', players.names[players.cur]);
+  if (name === null) return;
+  const trimmed = name.trim().slice(0, 6);
+  if (!trimmed) return;
+  players.names[players.cur] = trimmed;
+  savePlayers();
+  refreshPlayerButtons();
+});
+refreshPlayerButtons();
 
 // home screen tabs
 document.querySelectorAll('.tab').forEach(tab => {
@@ -932,7 +1011,7 @@ function gameOver() {
   refreshBestDisplays();
 
   finalScoreEl.textContent = score;
-  document.getElementById('scoreLabel').textContent = 'SCORE · ' + LEVELS[level].label;
+  document.getElementById('scoreLabel').textContent = players.names[players.cur] + ' · ' + LEVELS[level].label;
   commentEl.textContent = pickComment(score, isNew);
   adviceEl.textContent = score < 1800 ? pickHint() : '';
   newBestEl.classList.toggle('hidden', !isNew);
