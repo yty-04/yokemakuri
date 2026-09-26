@@ -565,8 +565,10 @@ let best = 0, running = false, score = 0, scoreAcc = 0, frame = 0, diff = 0;
 //   spawn: block spawn interval scale (bigger = fewer blocks)
 //   speed: block fall speed scale
 //   score: flat score multiplier (separate from difficulty, never tied to diff)
+//   catchUp: [startSec, endSec] — block pace blends into normal over this window,
+//            so easy can't be survived forever (score multiplier is NOT blended)
 const LEVELS = {
-  easy:   { label: 'やさしい',   ramp: 0.5, spawn: 1.5, speed: 0.75, score: 0.7 },
+  easy:   { label: 'やさしい',   ramp: 0.5, spawn: 1.5, speed: 0.75, score: 0.7, catchUp: [120, 300] },
   normal: { label: 'ふつう',     ramp: 1.0, spawn: 1.0, speed: 1.0,  score: 1.0 },
   hard:   { label: 'むずかしい', ramp: 1.3, spawn: 0.8, speed: 1.15, score: 1.3 },
 };
@@ -574,6 +576,16 @@ const LEVEL_KEY = 'yokemakuri_level_v1';
 let level = 'normal';
 try { const v = localStorage.getItem(LEVEL_KEY); if (LEVELS[v]) level = v; } catch (e) { /* default normal */ }
 let hardness = 0; // diff scaled by the level's ramp; drives block speed/density only
+let levelMods = { ramp: 1, spawn: 1, speed: 1 }; // current block-pace modifiers (after catch-up)
+function updateLevelMods() {
+  const lv = LEVELS[level], n = LEVELS.normal;
+  let b = 0;
+  if (lv.catchUp) {
+    const [a, z] = lv.catchUp;
+    b = Math.max(0, Math.min(1, (frame / 60 - a) / (z - a)));
+  }
+  for (const k of ['ramp', 'spawn', 'speed']) levelMods[k] = lv[k] + (n[k] - lv[k]) * b;
+}
 // Ranking persists via localStorage when the page is served from a real URL.
 // Wrapped in try/catch so it degrades to session-only if storage is blocked.
 const STORE_KEY = 'yokemakuri_scores_v1';
@@ -636,6 +648,7 @@ initStars();
 
 function reset() {
   score = 0; scoreAcc = 0; frame = 0; diff = 0; hardness = 0;
+  updateLevelMods();
   enemies = []; items = []; particles = []; shake = 0;
   floatTexts = [];
   dying = false; dyingTimer = 0; deathBlock = null;
@@ -649,7 +662,7 @@ function reset() {
 
 function spawnEnemy() {
   const size = 18 + Math.random() * 26;
-  const speed = (3 + hardness * 0.0011 + Math.random() * 2) * LEVELS[level].speed; // gentler speed increase
+  const speed = (3 + hardness * 0.0011 + Math.random() * 2) * levelMods.speed; // gentler speed increase
   enemies.push({
     x: Math.random() * (W - size) + size/2, y: -size, r: size/2, v: speed,
     hue: 200 + Math.random()*60, rot: Math.random()*Math.PI, vr: (Math.random()-0.5)*0.1
@@ -1011,7 +1024,8 @@ function update() {
   frame++;
   // shared difficulty clock (seconds survived, scaled). Used for speed, spawns, items, bomb.
   diff = frame / 6;
-  hardness = diff * LEVELS[level].ramp;
+  updateLevelMods();
+  hardness = diff * levelMods.ramp;
   // score grows faster over time, but more gently than before.
   const elapsedSec = frame / 60;
   let pointsPerFrame = (10 + elapsedSec * 0.5) / 60; // ~10/s at start, +~0.5/s each second
@@ -1061,7 +1075,7 @@ function update() {
   // Fades from very sparse to normal instead of snapping, so there's no difficulty cliff.
   const warmSec = frame / 60;
   const warmup = warmSec < 10 ? 1 + (1 - warmSec / 10) * 1.6 : 1;
-  const rate = Math.max(16, 42 - hardness * 0.03) * LEVELS[level].spawn * thinFactor * warmup; // gentler tightening
+  const rate = Math.max(16, 42 - hardness * 0.03) * levelMods.spawn * thinFactor * warmup; // gentler tightening
   if (frame % Math.floor(rate) === 0) spawnEnemy();
   if (hardness > 260 && thinTimer <= 0 && megaThinTimer <= 0 && frame % Math.floor(rate*1.8) === 0) spawnEnemy();
   // items less frequent now (~ every 7.5s)
